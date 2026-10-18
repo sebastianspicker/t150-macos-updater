@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""Developer-only: check a reviewed V35 patch manifest against a private stock V35
+flash image with the engine's rules, then print the policy.inc and Swift entries.
+
+Usage: script/fixes_profile.py MANIFEST.json STOCK_V35_FLASH.bin [--profile NAME] [--var PREFIX] [--array-only]
+  --profile   reviewed profile name the manifest must carry (default: the manifest's own,
+              which must be one of PROFILES)
+  --var       C identifier prefix for the generated names (default derived from the profile)
+  --array-only  print only the BytePatch array (for splicing into policy.inc)
+Reads files only. No USB access; nothing is written."""
+import hashlib
+import json
+import struct
+import sys
+from pathlib import Path
+
+APP_START, VERSION_OFFSET, FOOTER_OFFSET, PATCH_MAX = 0x2000, 0xFFF8, 0xFFFC, 8
+STOCK_SHA = "37a481796e85d05cf75bafc56bea73fb647b0cfc63270dbb3761d699ee6c5056"
+BOOT_SHA = "5565492b9e65c19274b8fcbc31caaf8e040e4c9a02004224732f6278fe3b624c"
+# Reviewed profile names and the C prefix of their compiled table.
+PROFILES = {"t150-v35-fixes-boot5": "fixes", "t150-v35-full-boot5": "full", "t150-v35-full-boot5-steady": "full_steady",
+            "t150-v35-sibrec-boot5": "sibrec", "t150-v35-sibrec-feat-boot5": "sibrec_feat",
+            "t150-v35-sibrec-raw-boot5": "sibrec_raw", "t150-v35-sibrec-feat-raw-boot5": "sibrec_feat_raw"}
+
+
+def fail(message):
+    sys.exit(f"REFUSED: {message}")
+
+
+def image_valid(image, version):
+    words = struct.unpack_from("<8I", image, APP_START)
+    stack, reset = words[0], words[1]
+    return (struct.unpack_from("<I", image, VERSION_OFFSET)[0] == version
+            and hashlib.sha256(image[:APP_START]).hexdigest() == BOOT_SHA
+            and sum(image[APP_START:FOOTER_OFFSET]) & 0xFFFFFFFF == struct.unpack_from("<I", image, FOOTER_OFFSET)[0]
+            and sum(words) & 0xFFFFFFFF == 0 and stack not in (0, 0xFFFFFFFF) and not stack & 7
+            and reset & 1 and APP_START <= reset & ~1 < 0x10000)
+
+
+def option(name, default=None):
+    if name in sys.argv:
+        index = sys.argv.index(name)
+        if index + 1 >= len(sys.argv):
+            fail(f"{name} needs a value")
+        value = sys.argv[index + 1]
+        del sys.argv[index:index + 2]
+        return value
+    return default
+
+
+def main():
+    profile_option = option("--profile")
+    var_option = option("--var")
+    array_only = "--array-only" in sys.argv
+    if array_only:
+        sys.argv.remove("--array-only")
+    if len(sys.argv) != 3:
+        sys.exit(__doc__)
+    manifest = json.loads(Path(sys.argv[1]).read_text())
+    stock = Path(sys.argv[2]).read_bytes()
+    if len(stock) != 0x10000 or hashlib.sha256(stock).hexdigest() != STOCK_SHA:
+        fail("the second argument is not the pinned stock V35 flash image")
+    name = manifest.get("profile")
+    if name not in PROFILES or (profile_option and name != profile_option):
+        fail(f"profile must be one of {sorted(PROFILES)}" + (f" and equal {profile_option}" if profile_option else ""))
+    var = var_option or PROFILES[name]
+    image, entries, seen = bytearray(stock), [], set()
+    for patch in manifest["patches"]:
+        address = int(patch["address"], 16)
+        original, replacement = bytes.fromhex(patch["original"]), bytes.fromhex(patch["replacement"])
+        if not 1 <= len(original) <= PATCH_MAX or len(original) != len(replacement) or original == replacement:
+            fail(f"{patch['id']}: length 1..{PATCH_MAX}, equal lengths, and a real change are required")
+        if address < APP_START or address + len(original) > VERSION_OFFSET:
+            fail(f"{patch['id']}: outside 0x{APP_START:x}..0x{VERSION_OFFSET:x}")
+        span = set(range(address, address + len(original)))
+        if span & seen:
+            fail(f"{patch['id']}: overlaps an earlier patch")
+        seen |= span
+        if image[address:address + len(original)] != original:
+            fail(f"{patch['id']}: original bytes do not match stock V35 at 0x{address:04x}")
+        image[address:address + len(original)] = replacement
+        entries.append((patch["id"], address, original, replacement, patch.get("reason", "")))
+    struct.pack_into("<I", image, FOOTER_OFFSET, sum(image[APP_START:FOOTER_OFFSET]) & 0xFFFFFFFF)
+    digest = hashlib.sha256(image).hexdigest()
+    if digest != manifest["image_sha256"]:
+        fail(f"rebuilt image sha256 {digest} != manifest {manifest['image_sha256']}")
+    if image[:APP_START] != stock[:APP_START] or not image_valid(image, 35):
+        fail("rebuilt image fails the engine's bootloader, footer or vector checks")
+
+    def c_bytes(data):
+        return "{" + ",".join(f"0x{b:02x}" for b in data) + "}"
+    if array_only:
+        print(f"static const BytePatch {var}_patches[] = {{")
+        for identifier, address, original, replacement, reason in entries:
+            print(f"    {{0x{address:04x},{len(original)},{c_bytes(original)},{c_bytes(replacement)}}}, /* {identifier}: {reason} */")
+        print("};")
+        return
+    print("/* policy.inc: reviewed patch set (generated by script/fixes_profile.py) */")
+    print(f'PROFILE_HASH {var}_sha[] = "{digest}";')
+    print(f"static const BytePatch {var}_patches[] = {{")
+    for identifier, address, original, replacement, reason in entries:
+        print(f"    {{0x{address:04x},{len(original)},{c_bytes(original)},{c_bytes(replacement)}}}, /* {identifier}: {reason} */")
+    print("};")
+    print(f'    {{"{name}", 35, {var}_sha, {var}_patches, {len(entries)}, {{official_sha}}}},')
+    print("    /* and add this target's hash to the same_version_baselines of every V35 profile it may replace */")
+    print()
+    print("// FirmwareProfile.swift targets entry")
+    print(f'FirmwareTarget(identifier: "{name}", title: "…", version: 35,')
+    print(f'    targetSHA256: "{digest}", isOfficial: false, allowsSameVersion: true, requiresDoubleOptIn: false,')
+    print('    summary: "…")')
+    print(f"\nOK: {len(entries)} patches, footer 0x{struct.unpack_from('<I', image, FOOTER_OFFSET)[0]:08x}, sha256 {digest}")
+
+
+main()
