@@ -1,0 +1,50 @@
+# Default private: only these reviewed public roots enter Git.
+/*
+!/.gitignore
+!/Package.swift
+!/README.md
+!/CHANGELOG.md
+!/CONTRIBUTING.md
+!/SECURITY.md
+!/.github/
+!/LICENSE
+!/Sources/
+!/Native/
+!/docs/
+/docs/*
+!/docs/USER_GUIDE.md
+!/docs/DEVELOPMENT.md
+!/docs/THIRD_PARTY.md
+!/docs/VALIDATION.md
+!/docs/FIRMWARE_BUILDS.md
+!/docs/licenses/
+!/script/
+!/Resources/
+
+# Tests and test runners stay private.
+/Native/Tests/
+/script/test.sh
+
+# Private one-device investigation, captures, firmware, and legacy utilities.
+/delivery/
+/evidence/
+/src/
+/tools/
+
+# Reproducible local build products and imported proprietary content.
+/.build/
+/.swiftpm/
+/dist/
+/Native/build/
+*.exe
+*.sys
+*.tmf
+*.cab
+*.hdr
+*.bin
+*.log
+*.asm
+*.zip
+*.dmg
+.DS_Store
+xcuserdata/
