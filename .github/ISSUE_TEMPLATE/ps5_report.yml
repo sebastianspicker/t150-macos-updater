@@ -1,0 +1,59 @@
+name: PS5 test report
+description: Tell us how a build behaved with a game on the PS5 (or PS4).
+labels: [ps5-report]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Reports from real wheels decide which build is right. Both "it worked" and "it didn't" help.
+  - type: dropdown
+    id: build
+    attributes:
+      label: Firmware build on the wheel
+      options:
+        - PS5 stutter fix
+        - Official V35
+        - V35 + fixes
+        - PS5 stutter patch (first attempt)
+        - Sibling mimic
+        - Sibling mimic + RAW keepalive
+        - PS5 stutter fix + RAW keepalive
+    validations:
+      required: true
+  - type: input
+    id: game
+    attributes:
+      label: Game and version
+      placeholder: Assetto Corsa Competizione, PS5 version (shown in the game options)
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: Stutter
+      options:
+        - Gone
+        - Better, but still there
+        - Unchanged
+        - Worse
+        - I never had stutter with this game
+    validations:
+      required: true
+  - type: input
+    id: time
+    attributes:
+      label: How long you drove
+      placeholder: 3 races of about 20 minutes
+  - type: textarea
+    id: wheel
+    attributes:
+      label: Force feedback, pedals and buttons
+      description: Did everything work as before? Anything that felt different?
+  - type: dropdown
+    id: record
+    attributes:
+      label: Recorder record
+      description: The sibling mimic builds can save a record of what the console sends (flip the PS/PC switch to PC while the game runs). The tool to read it is not published yet; say if you saved one and we'll follow up.
+      options:
+        - Not saved
+        - Saved, I can share it

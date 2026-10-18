@@ -1,0 +1,69 @@
+name: Bug report
+description: The app stopped, refused something it should accept, or behaved unexpectedly.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please do **not** attach `backup-a.bin`, `backup-b.bin`, `readback.bin`
+        or the installer: they contain Thrustmaster's firmware. Logs and screenshots are fine.
+  - type: input
+    id: app-version
+    attributes:
+      label: App version
+      description: Shown in the app's About window, for example 0.6.0 (7).
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac
+      placeholder: macOS 15.3, MacBook Air M2
+    validations:
+      required: true
+  - type: dropdown
+    id: build
+    attributes:
+      label: Firmware build you selected
+      options:
+        - Official V35
+        - V35 + fixes
+        - PS5 stutter fix
+        - PS5 stutter patch (first attempt)
+        - Sibling mimic
+        - Sibling mimic + RAW keepalive
+        - PS5 stutter fix + RAW keepalive
+    validations:
+      required: true
+  - type: dropdown
+    id: step
+    attributes:
+      label: Step where it happened
+      options:
+        - Choosing the installer
+        - Connecting the wheel / recovery mode
+        - Saving backups
+        - Review
+        - Update and verify
+        - Restart / finished
+        - After the update, while using the wheel
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The message the app showed, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: wheel-state
+    attributes:
+      label: Wheel state now
+      description: Does it calibrate? Is the MODE light on? Does the app still see it in recovery mode?
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Operation logs from the session folder (Help > Show Saved Sessions). No .bin files.
+      render: text
