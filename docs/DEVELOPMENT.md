@@ -92,8 +92,10 @@ On an Apple Silicon Mac with Swift 6 or newer and CMake 3.21 or newer:
 `package_app.sh` builds Unshield, the engine and the app and then runs the bundle
 audit, which includes the engine's built-in `self-test`. Neither sends USB
 requests. CI (`.github/workflows/ci.yml`) runs `package_app.sh` on a GitHub
-macOS 15 runner for every push to `main` and every pull request. The test suite
-is kept private.
+macOS 15 runner automatically for Dependabot-authored pull requests, or by
+manual dispatch. The separate security workflow builds the same source for
+CodeQL Swift/C analysis on its own triggers; neither workflow publishes a
+release or updates a wheel. The test suite is kept private.
 
 Launching the GUI is not an end-to-end test. Don't run `prepare`, `apply` or
 `finish` against a wheel as a routine check.

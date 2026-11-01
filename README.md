@@ -11,14 +11,38 @@ over USB. You download the official Thrustmaster installer yourself. The app
 reads the firmware out of it without running it, so you don't need Windows, Wine,
 a virtual machine or Homebrew.
 
-It can also install a modified V35 build that fixes the whole-game stutter in
-Assetto Corsa Competizione on the PS5 (see [below](#the-acc-ps5-stutter)).
+<details>
+<summary>Status and limitations</summary>
 
-> [!WARNING]
-> This is an independent, experimental project. It is not made, endorsed or
-> supported by Thrustmaster. Updating firmware can leave a wheel unusable, and
-> using unofficial software or modified firmware may void your warranty. You use
-> it at your own risk. See the [disclaimer](#disclaimer).
+This is an independent experimental firmware updater. Developed
+independently alongside my main professional work. It remains a starting
+point to inspect and validate, rather than a ready-to-use, vendor-supported
+product. Support is restricted to the documented T150 bootloader, installer
+and firmware; the reported PS5 stutter improvement comes from one tester,
+rather than broad hardware qualification.
+
+**Disclaimer.** This project is not endorsed or supported by Thrustmaster.
+Firmware changes can leave a wheel unusable and may affect warranty
+coverage. Read the existing disclaimer and recovery guide, validate your
+exact device, preserve backups, and take responsibility for any update you
+perform.
+
+</details>
+
+It can also install a modified V35 build reported to remove whole-game stutter
+in Assetto Corsa Competizione on the PS5 on one tester's T150
+(see [below](#the-acc-ps5-stutter)).
+
+The app checks and prepares files before the separate, explicitly confirmed
+update step. Building the app does not update a wheel.
+
+```mermaid
+flowchart LR
+    A[Official installer you supply] --> B[Extract and check pinned firmware]
+    B --> C[Save backups and review]
+    C --> D[Confirm the wheel update]
+    D --> E[Verify the result]
+```
 
 ## What it supports
 
@@ -57,13 +81,14 @@ from the official image:
 | Build in the app | Purpose |
 | --- | --- |
 | Official V35 | Thrustmaster's firmware, unchanged |
-| **PS5 stutter fix** | **Fixes the ACC PS5 stutter.** Experimental. This is the build to use. |
+| **PS5 stutter fix** | Reported to fix ACC PS5 stutter on one tester's T150. Experimental. |
 | V35 + fixes | Fixes six firmware defects, such as a settings log overflow that eventually locks up the wheel and missing bounds checks on USB commands |
 | Other experimental builds (4) | Earlier and alternative attempts at the stutter, kept for completeness. Collapsed in the app. |
 
-Each build is checked against a pinned SHA-256 before anything is written. None
-of them touches the bootloader, so you can always switch back to the official
-firmware. [FIRMWARE_BUILDS.md](docs/FIRMWARE_BUILDS.md) lists what each build
+Each build is checked against a pinned SHA-256 before anything is written.
+The updater excludes the bootloader region from writes. Reverting to official
+firmware still requires a supported wheel that can enter programming mode;
+this is not a guarantee of recovery from every failure. [FIRMWARE_BUILDS.md](docs/FIRMWARE_BUILDS.md) lists what each build
 changes and why.
 
 ## The ACC PS5 stutter
@@ -154,6 +179,11 @@ More in [DEVELOPMENT.md](docs/DEVELOPMENT.md). Changes per version are in the
 [changelog](CHANGELOG.md).
 
 ## Contributing
+
+General build CI runs automatically only for Dependabot-authored pull requests
+and can be dispatched manually. The separate CodeQL workflow scans Swift and
+native C on its own security triggers. These workflows do not publish releases
+or update a wheel.
 
 Reports from real wheels help most: open a
 [PS5 test report](https://github.com/sebastianspicker/t150-macos-updater/issues/new?template=ps5_report.yml)

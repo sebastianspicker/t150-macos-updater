@@ -27,7 +27,11 @@ You need an Apple Silicon Mac with Swift 6 or newer and CMake 3.21 or newer.
 ./script/package_app.sh   # builds dist/T150 Firmware Updater.app and audits it
 ```
 
-CI runs the same build and audit on every pull request. Architecture, target profiles and
+General CI runs the same build and audit automatically for Dependabot-authored
+pull requests and remains manually dispatchable. A separate CodeQL security
+workflow builds and scans Swift and native C on pushes to `main`, pull requests,
+a weekly schedule and manual dispatch. No workflow publishes a binary or
+contacts a wheel. Architecture, target profiles and
 the release boundary are described in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 Write docs and UI text in plain, short sentences. By contributing you agree that your
