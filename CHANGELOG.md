@@ -8,6 +8,16 @@ published as a release. Build numbers are in parentheses.
 - Restrict automatic general CI to Dependabot-authored PRs; retain manual builds.
 - Add weekly GitHub Actions updates and separate Swift/native C CodeQL analysis.
 - Fold the status notice below the introduction and clarify build/update boundaries.
+- After a failed update, the app decides from the engine's write marker whether
+  firmware may have been written. If the engine could not even start, the app now
+  says that nothing was written instead of showing the partial write warning.
+- Choosing an installer again clears the safety checklist.
+- The engine's status calls a wheel in normal mode "normal" before the wheel is set
+  up, not "recovery".
+- Backup reads and programming open the bootloader through one shared path in the
+  engine. The identity checks are unchanged.
+- Remove the `--telemetry` alias of `build_and_run.sh`; use `--logs`.
+- `fixes_profile.py` no longer prints an outdated Swift catalog entry.
 
 ## 0.6.0 (7), 2026-10-18
 

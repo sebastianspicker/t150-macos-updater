@@ -66,9 +66,8 @@ the profile from the session manifest (schema 2).
 What each build changes is described in [FIRMWARE_BUILDS.md](FIRMWARE_BUILDS.md).
 Each Swift `FirmwareTarget` also has a short `name`, a `tagline` and a `role`
 for the build picker: `official`, `modified`, `recommendedFix` (exactly one) or
-`extra` (shown collapsed). All seven set `allowsSameVersion: true`. Slots 2 to 6 also
-set `requiresDoubleOptIn: true`, which the GUI turns into a second
-acknowledgement.
+`extra` (shown collapsed). Slots 2 to 6 set `requiresDoubleOptIn: true`, which
+the GUI turns into a second acknowledgement.
 
 The patch tables were generated and checked against stock V35 with
 `script/fixes_profile.py MANIFEST STOCK --profile NAME [--array-only]`. The patch
@@ -115,7 +114,7 @@ check does not replace running the app on each macOS version.
 
 `script/build_and_run.sh` packages and opens the app. It refuses to rebuild while the updater is
 running and never kills an update. Other modes: `--debug`, `--logs`,
-`--telemetry`, `--verify`.
+`--verify`.
 
 ## App icon
 
@@ -147,8 +146,8 @@ release would need its own signing setup and credentials.
 
 ## Public repository boundary
 
-Only the package, the native engine, synthetic tests, scripts, resources and
-public documentation belong in Git. `.gitignore` treats every top-level path as
+Only the package, the native engine, scripts, resources and public
+documentation belong in Git. `.gitignore` treats every top-level path as
 private unless it is on the allowlist. It excludes the private `delivery`,
 `evidence`, `src` and `tools` folders, build output, Windows executables and
 drivers, firmware, cabinets, raw captures and logs. Check the index before

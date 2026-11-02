@@ -63,7 +63,7 @@ static int probe_status(void) {
     int bad=1;
     if (status_pid==0xb676) {bad=!versions_match(device,-1) || !descriptor_matches(device);if (!bad) state_name="recovery";}
     else if (status_pid==0xb677) {bad=normal_version(device);if (!bad) state_name="normal";}
-    else if (status_pid==0xb65d) {bad=!model_matches(device);observed_application=-1;if (!bad) state_name="recovery";}
+    else if (status_pid==0xb65d) {bad=!model_matches(device);observed_application=-1;if (!bad) state_name="normal";}
     close_device(device);return bad;
 }
 

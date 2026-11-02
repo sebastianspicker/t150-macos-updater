@@ -9,7 +9,6 @@ final class UpdateModel: ObservableObject {
     @Published var headline = "Update your T150 from a Mac."
     @Published var detail = "Choose the official Thrustmaster installer. This app checks compatibility, saves two backups, and verifies every flash byte before restarting your wheel."
     @Published var failure: String?
-    @Published var technicalDetail = ""
     @Published var firmware: ImportedFirmware?
     @Published var target: FirmwareTarget?
     @Published var device: EngineResult.Device?
@@ -35,13 +34,6 @@ final class UpdateModel: ObservableObject {
     /// private engine session inside the import session.
     private var attempt: URL?
     let base: URL
-
-    /// Engine apply codes that are emitted before the apply-started marker, so no
-    /// programming command can have been sent. Anything else is treated as a write.
-    private static let applyCodesBeforeWrite: Set<String> = [
-        "arguments", "confirmation_required", "busy", "sleep_assertion", "session_directory",
-        "memory", "session_invalid", "ac_power_required", "log", "device_changed", "baseline_changed", "marker_failed"
-    ]
 
     init() {
         base = FileManager.default.homeDirectoryForCurrentUser
@@ -80,6 +72,7 @@ final class UpdateModel: ObservableObject {
         do { try PrivateFiles.createDirectory(session) } catch { fail(error); return }
         firmware = nil; target = nil; attempt = nil; device = nil; alreadyCurrent = false; plan = []
         backupAcknowledged = false; modifiedAcknowledged = false; experimentalAcknowledged = false
+        secured = false; powerConnected = false; ps3 = false; stableUSB = false
         stage = .installer
         begin("Checking the official installer", "Verifying the package, extracting its cabinet privately, and validating the T150 image. Temporary extracted files are removed after validation. The wheel is not being changed.")
         Task {
@@ -119,16 +112,15 @@ final class UpdateModel: ObservableObject {
         do {
             let result = try await Task.detached { try EngineClient.run("status", session: firmware.session) }.value
             device = result.device
-            technicalDetail = result.message
             if result.state == "multiple_devices" {
                 throw UpdaterError.process("More than one Thrustmaster USB device is connected. Disconnect every other Thrustmaster product (a second wheel, pedals or a shifter with its own USB plug), keep only the T150, and check again. Nothing was sent to the wheel.")
             }
             guard result.ok else { throw UpdaterError.process(result.message) }
             let version = result.device?.applicationVersion
-            let sameVersionCheck = version == target.version && target.allowsSameVersion
-            if let version, version >= target.version, !sameVersionCheck {
+            let sameVersionCheck = version == target.version
+            if let version, version > target.version {
                 alreadyCurrent = true; stage = .complete
-                headline = version == target.version ? "Your wheel is already up to date" : "Your wheel has newer firmware"
+                headline = "Your wheel has newer firmware"
                 detail = "The wheel reports V\(version); the selected firmware is V\(target.version). No update or downgrade will be performed."
                 if result.device?.pid == 0xb676 {
                     detail += " You entered recovery mode without starting an update. With no operation running, reconnect USB normally without holding L3 + R3 to leave recovery."
@@ -187,20 +179,11 @@ final class UpdateModel: ObservableObject {
         stage = .updating
         begin("Updating to \(target.name)", "Keep USB and wheel power connected. Keep the Mac awake with its lid open. The app will verify the entire flash before restarting; the wheel may then calibrate.")
         Task {
-            var writeMayHaveStarted = true
             var verifiedNotRestarted: Bool? = nil   // set once apply succeeded: whether finish issued the reset
             do {
-                let applied: EngineResult
-                do {
-                    applied = try await Task.detached {
-                        try EngineClient.run("apply", session: attempt, extra: ["--confirm-program"])
-                    }.value
-                } catch let error as UpdaterError {
-                    // The engine could not even be launched: nothing was sent to the wheel.
-                    if case .missingTool = error { writeMayHaveStarted = false }
-                    throw error
-                }
-                if !applied.ok, Self.applyCodesBeforeWrite.contains(applied.code) { writeMayHaveStarted = false }
+                let applied = try await Task.detached {
+                    try EngineClient.run("apply", session: attempt, extra: ["--confirm-program"])
+                }.value
                 guard applied.ok else { throw UpdaterError.process(applied.message) }
                 try Self.requireProfile(applied, target)
                 verifiedNotRestarted = true
@@ -218,6 +201,8 @@ final class UpdateModel: ObservableObject {
                 detail = "The entire image was verified, the original bootloader is unchanged, and the wheel reports V\(target.version) in normal mode. Check that calibration and the MODE light look normal. Your backups and verification records are saved."
                 end()
             } catch {
+                // The engine saves apply-started before it can send any programming command.
+                let writeMayHaveStarted = FileManager.default.fileExists(atPath: attempt.appendingPathComponent("apply-started").path)
                 if let verifiedNotRestarted {
                     failedAfterVerification(error, restartIssued: !verifiedNotRestarted, target: target)
                 } else if writeMayHaveStarted { fail(error, afterWrite: true) } else { stoppedBeforeWrite(error) }

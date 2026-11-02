@@ -4,7 +4,6 @@ struct EngineResult: Decodable {
     struct Device: Decodable {
         let pid: Int?
         let applicationVersion: Int?
-        let bootloaderVersion: Int?
     }
     struct Run: Decodable {
         let address: Int

@@ -155,137 +155,6 @@ static int descriptor_matches(IOUSBDeviceInterface **device) {
     return !result && request.wLenDone == sizeof(expected) && !memcmp(data, expected, sizeof(expected));
 }
 
-static int capture_image(unsigned char output[IMAGE_SIZE], int application_version,
-                         const unsigned char *expected_partial_image) {
-    int status = 1, device_open = 0, interface_open = 0;
-    if (transport_quarantined || interrupted || !bound_registry) return 1;
-    io_iterator_t devices = IO_OBJECT_NULL, interfaces = IO_OBJECT_NULL;
-    io_service_t service, target = IO_OBJECT_NULL, interface_service = IO_OBJECT_NULL;
-    IOCFPlugInInterface **plugin = NULL;
-    IOUSBDeviceInterface **device = NULL;
-    IOUSBInterfaceInterface300 **interface = NULL;
-    CFRunLoopSourceRef source = NULL;
-    Reader *reader = calloc(1, sizeof(*reader));
-    if (!reader) return 1;
-    reader->expected_partial_image = expected_partial_image;
-    IOReturn result = IOServiceGetMatchingServices(kIOMainPortDefault,
-        IOServiceMatching(kIOUSBDeviceClassName), &devices);
-    if (result) { fprintf(stderr, "USB enumeration failed\n"); goto cleanup; }
-    unsigned count = 0;
-    while ((service = IOIteratorNext(devices))) {
-        if (property(service, CFSTR("idVendor")) == 0x044f) {
-            ++count;
-            if (!target && property(service, CFSTR("idProduct")) == 0xb676) {
-                IOObjectRetain(service);
-                target = service;
-            }
-        }
-        IOObjectRelease(service);
-    }
-    if (count != 1 || !target) { fprintf(stderr, "Require exactly one Thrustmaster device, PID b676.\n"); goto cleanup; }
-    uint64_t registry = 0;
-    if (IORegistryEntryGetRegistryEntryID(target, &registry) || registry != bound_registry) goto cleanup;
-    SInt32 score = 0;
-    result = IOCreatePlugInInterfaceForService(target, kIOUSBDeviceUserClientTypeID,
-        kIOCFPlugInInterfaceID, &plugin, &score);
-    if (result || !plugin) { fprintf(stderr, "USB client failed 0x%08x\n", result); goto cleanup; }
-    HRESULT queried = (*plugin)->QueryInterface(plugin, CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID320), (LPVOID *)&device);
-    IODestroyPlugInInterface(plugin); plugin = NULL;
-    if (queried || !device) goto cleanup;
-    result = (*device)->USBDeviceOpen(device);
-    if (result) { fprintf(stderr, "USB open failed 0x%08x\n", result); goto cleanup; }
-    device_open = 1;
-    if (!versions_match(device, application_version) || !descriptor_matches(device)) {
-        fprintf(stderr, "Bootloader identity guards failed; no OUT sent.\n"); goto cleanup;
-    }
-    IOUSBFindInterfaceRequest find = {
-        kIOUSBFindInterfaceDontCare, kIOUSBFindInterfaceDontCare,
-        kIOUSBFindInterfaceDontCare, kIOUSBFindInterfaceDontCare
-    };
-    result = (*device)->CreateInterfaceIterator(device, &find, &interfaces);
-    if (result) goto cleanup;
-    interface_service = IOIteratorNext(interfaces);
-    if (!interface_service) goto cleanup;
-    service = IOIteratorNext(interfaces);
-    if (service) { IOObjectRelease(service); fprintf(stderr, "Unexpected extra USB interface.\n"); goto cleanup; }
-    result = IOCreatePlugInInterfaceForService(interface_service, kIOUSBInterfaceUserClientTypeID,
-        kIOCFPlugInInterfaceID, &plugin, &score);
-    if (result || !plugin) goto cleanup;
-    queried = (*plugin)->QueryInterface(plugin, CFUUIDGetUUIDBytes(kIOUSBInterfaceInterfaceID300), (LPVOID *)&interface);
-    IODestroyPlugInInterface(plugin); plugin = NULL;
-    if (queried || !interface) goto cleanup;
-    result = (*interface)->USBInterfaceOpen(interface); /* Ordinary open; never seize. */
-    if (result) { fprintf(stderr, "Interface open failed 0x%08x\n", result); goto cleanup; }
-    interface_open = 1;
-    UInt8 number = 255, endpoints = 0;
-    if ((*interface)->GetInterfaceNumber(interface, &number) || number != 0 ||
-        (*interface)->GetNumEndpoints(interface, &endpoints) || endpoints != 2) goto cleanup;
-    UInt8 input = 0;
-    for (UInt8 pipe = 1; pipe <= endpoints; ++pipe) {
-        UInt8 direction, endpoint, type, interval;
-        UInt16 packet_size;
-        if ((*interface)->GetPipeProperties(interface, pipe, &direction, &endpoint,
-            &type, &packet_size, &interval)) goto cleanup;
-        if (direction == kUSBIn && endpoint == 1 && type == kUSBInterrupt && packet_size == 64 && interval == 1) input = pipe;
-        else if (!(direction == kUSBOut && endpoint == 1 && type == kUSBBulk && packet_size == 64 && interval == 1)) goto cleanup;
-    }
-    if (!input) goto cleanup;
-    result = (*interface)->CreateInterfaceAsyncEventSource(interface, &source);
-    if (result || !source) goto cleanup;
-    CFRunLoopAddSource(CFRunLoopGetCurrent(), source, kCFRunLoopDefaultMode);
-    reader->interface = interface; reader->input_pipe = input;
-    /* Arm the interrupt IN transfer BEFORE starting the read stream. */
-    result = (*interface)->ReadPipeAsync(interface, input, reader->packet,
-        sizeof(reader->packet), received, reader);
-    if (result) goto cleanup;
-    reader->pending = 1;
-    IOUSBDevRequestTO request = {0};
-        request.noDataTimeout = 1000; request.completionTimeout = 1000;
-    request.bmRequestType = 0x40;
-    request.bRequest = 0x47;
-    printf("read_stream_trigger=40 47 0000 0000 0000\n"); fflush(stdout);
-    result = (*device)->DeviceRequestTO(device, &request);
-    if (result) { fprintf(stderr, "Read trigger failed 0x%08x; no retry.\n", result); goto cleanup; }
-    uint64_t deadline = monotonic_nanoseconds() + UINT64_C(10000000000);
-    while (!interrupted && !reader->error && reader->count < BLOCKS && monotonic_nanoseconds() < deadline)
-        CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, true);
-    printf("read_frames=%u unique_blocks=%u duplicates=%u tag=%u zero_padded_frames=%u stale_partial_frames=%u\n",
-           reader->packets, reader->count, reader->duplicates, reader->tag, reader->padded_frames, reader->stale_partial_frames);
-    if (interrupted || !complete_image(reader) || reader->tag != 3) {
-        fprintf(stderr, "Incomplete or invalid backup; no image saved.\n"); goto cleanup;
-    }
-    memcpy(output, reader->image, IMAGE_SIZE);
-    status = 0;
-cleanup:
-    reader->stopping = 1;
-    if (reader->pending && interface_open) {
-        /* AbortPipe cancels host reads; it sends no erase/reset command. */
-        (*interface)->AbortPipe(interface, reader->input_pipe);
-        uint64_t drain_deadline = monotonic_nanoseconds() + UINT64_C(1000000000);
-        while (reader->pending && monotonic_nanoseconds() < drain_deadline)
-            CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.01, true);
-    }
-    if (source) {
-        CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, kCFRunLoopDefaultMode);
-        CFRelease(source);
-    }
-    if (interface_open) (*interface)->USBInterfaceClose(interface);
-    if (interface) (*interface)->Release(interface);
-    if (device_open) (*device)->USBDeviceClose(device);
-    if (device) (*device)->Release(device);
-    if (plugin) IODestroyPlugInInterface(plugin);
-    if (interface_service) IOObjectRelease(interface_service);
-    if (interfaces) IOObjectRelease(interfaces);
-    if (target) IOObjectRelease(target);
-    if (devices) IOObjectRelease(devices);
-    if (reader->pending) { transport_quarantined = 1; status = 1; }
-    /* Keep callback storage alive if the host did not deliver abort completion.
-     * This process exits immediately afterward, so no dangling callback target. */
-    if (!reader->pending) free(reader);
-    return status;
-}
-
-
 #define T150_PAGE_SIZE 4096
 typedef struct { unsigned address, length; } Run;
 typedef struct {
@@ -338,7 +207,9 @@ static void write_completed(void *reference, IOReturn result, void *argument) {
     session->write_pending = 0;
 }
 
-static int open_session(ProgramSession *session) {
+/* The one path that finds, identifies and opens the bootloader, for backup reads and
+ * for programming. It sends only IN control requests (versions, descriptor), never an OUT. */
+static int open_bootloader(ProgramSession *session, int application_version) {
     if (transport_quarantined || interrupted || !bound_registry) return 1;
     io_iterator_t devices = IO_OBJECT_NULL, interfaces = IO_OBJECT_NULL;
     io_service_t service, target = IO_OBJECT_NULL, interface_service = IO_OBJECT_NULL;
@@ -347,7 +218,7 @@ static int open_session(ProgramSession *session) {
     int status = 1;
     IOReturn result = IOServiceGetMatchingServices(kIOMainPortDefault,
         IOServiceMatching(kIOUSBDeviceClassName), &devices);
-    if (result) goto cleanup;
+    if (result) { fprintf(stderr, "USB enumeration failed\n"); goto cleanup; }
     unsigned count = 0;
     while ((service = IOIteratorNext(devices))) {
         if (property(service, CFSTR("idVendor")) == 0x044f) {
@@ -358,36 +229,36 @@ static int open_session(ProgramSession *session) {
         }
         IOObjectRelease(service);
     }
-    if (count != 1 || !target) goto cleanup;
+    if (count != 1 || !target) { fprintf(stderr, "Require exactly one Thrustmaster device, PID b676.\n"); goto cleanup; }
     uint64_t registry = 0;
     if (IORegistryEntryGetRegistryEntryID(target, &registry) || registry != bound_registry) goto cleanup;
     result = IOCreatePlugInInterfaceForService(target, kIOUSBDeviceUserClientTypeID,
         kIOCFPlugInInterfaceID, &plugin, &score);
-    if (result || !plugin) goto cleanup;
+    if (result || !plugin) { fprintf(stderr, "USB client failed 0x%08x\n", result); goto cleanup; }
     /* DeviceRequestTO is present from v182 onward; explicitly request v320.
      * Only its compatible prefix methods are used via the current SDK alias. */
     HRESULT queried = (*plugin)->QueryInterface(plugin, CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID320), (LPVOID *)&session->device);
     IODestroyPlugInInterface(plugin); plugin = NULL;
     if (queried || !session->device) goto cleanup;
     result = (*session->device)->USBDeviceOpen(session->device);
-    if (result) goto cleanup;
+    if (result) { fprintf(stderr, "USB open failed 0x%08x\n", result); goto cleanup; }
     session->device_open = 1;
-    if (!versions_match(session->device, expected_application) || !descriptor_matches(session->device)) goto cleanup;
+    if (!versions_match(session->device, application_version) || !descriptor_matches(session->device)) goto cleanup;
     IOUSBFindInterfaceRequest find = {kIOUSBFindInterfaceDontCare,kIOUSBFindInterfaceDontCare,kIOUSBFindInterfaceDontCare,kIOUSBFindInterfaceDontCare};
     result = (*session->device)->CreateInterfaceIterator(session->device, &find, &interfaces);
     if (result) goto cleanup;
     interface_service = IOIteratorNext(interfaces);
     if (!interface_service) goto cleanup;
     service = IOIteratorNext(interfaces);
-    if (service) { IOObjectRelease(service); goto cleanup; }
+    if (service) { IOObjectRelease(service); fprintf(stderr, "Unexpected extra USB interface.\n"); goto cleanup; }
     result = IOCreatePlugInInterfaceForService(interface_service, kIOUSBInterfaceUserClientTypeID,
         kIOCFPlugInInterfaceID, &plugin, &score);
     if (result || !plugin) goto cleanup;
     queried = (*plugin)->QueryInterface(plugin, CFUUIDGetUUIDBytes(kIOUSBInterfaceInterfaceID300), (LPVOID *)&session->interface);
     IODestroyPlugInInterface(plugin); plugin = NULL;
     if (queried || !session->interface) goto cleanup;
-    result = (*session->interface)->USBInterfaceOpen(session->interface);
-    if (result) goto cleanup;
+    result = (*session->interface)->USBInterfaceOpen(session->interface); /* Ordinary open; never seize. */
+    if (result) { fprintf(stderr, "Interface open failed 0x%08x\n", result); goto cleanup; }
     session->interface_open = 1;
     UInt8 number = 255, endpoints = 0;
     if ((*session->interface)->GetInterfaceNumber(session->interface, &number) || number != 0 ||
@@ -410,9 +281,11 @@ cleanup:
     if (interfaces) IOObjectRelease(interfaces);
     if (target) IOObjectRelease(target);
     if (devices) IOObjectRelease(devices);
-    if (status) fprintf(stderr, "Programming session identity/interface guards failed; no programming OUT sent.\n");
+    if (status) fprintf(stderr, "Bootloader identity/interface guards failed; no OUT request sent.\n");
     return status;
 }
+
+static int open_session(ProgramSession *session) { return open_bootloader(session, expected_application); }
 
 static void close_session(ProgramSession *session) {
     session->stopping = 1;
@@ -432,6 +305,55 @@ static void close_session(ProgramSession *session) {
     if (session->interface) (*session->interface)->Release(session->interface);
     if (session->device_open) (*session->device)->USBDeviceClose(session->device);
     if (session->device) (*session->device)->Release(session->device);
+}
+
+/* Reads the complete flash through the bootloader's 40/47 read stream. */
+static int capture_image(unsigned char output[IMAGE_SIZE], int application_version,
+                         const unsigned char *expected_partial_image) {
+    Reader *reader = calloc(1, sizeof(*reader));
+    if (!reader) return 1;
+    reader->expected_partial_image = expected_partial_image;
+    ProgramSession session = {0};
+    int status = 1;
+    if (open_bootloader(&session, application_version)) goto cleanup;
+    reader->interface = session.interface; reader->input_pipe = session.input;
+    /* Arm the interrupt IN transfer BEFORE starting the read stream. */
+    IOReturn result = (*session.interface)->ReadPipeAsync(session.interface, session.input, reader->packet,
+        sizeof(reader->packet), received, reader);
+    if (result) goto cleanup;
+    reader->pending = 1;
+    IOUSBDevRequestTO request = {0};
+    request.noDataTimeout = 1000; request.completionTimeout = 1000;
+    request.bmRequestType = 0x40;
+    request.bRequest = 0x47;
+    printf("read_stream_trigger=40 47 0000 0000 0000\n"); fflush(stdout);
+    result = (*session.device)->DeviceRequestTO(session.device, &request);
+    if (result) { fprintf(stderr, "Read trigger failed 0x%08x; no retry.\n", result); goto cleanup; }
+    uint64_t deadline = monotonic_nanoseconds() + UINT64_C(10000000000);
+    while (!interrupted && !reader->error && reader->count < BLOCKS && monotonic_nanoseconds() < deadline)
+        CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.05, true);
+    printf("read_frames=%u unique_blocks=%u duplicates=%u tag=%u zero_padded_frames=%u stale_partial_frames=%u\n",
+           reader->packets, reader->count, reader->duplicates, reader->tag, reader->padded_frames, reader->stale_partial_frames);
+    if (interrupted || !complete_image(reader)) {
+        fprintf(stderr, "Incomplete or invalid backup; no image saved.\n"); goto cleanup;
+    }
+    memcpy(output, reader->image, IMAGE_SIZE);
+    status = 0;
+cleanup:
+    reader->stopping = 1;
+    if (reader->pending && session.interface_open) {
+        /* AbortPipe cancels host reads; it sends no erase/reset command. */
+        (*session.interface)->AbortPipe(session.interface, session.input);
+        uint64_t drain_deadline = monotonic_nanoseconds() + UINT64_C(1000000000);
+        while (reader->pending && monotonic_nanoseconds() < drain_deadline)
+            CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.01, true);
+    }
+    close_session(&session); /* The reader owns its read, so session.read_pending stays 0. */
+    if (reader->pending) { transport_quarantined = 1; status = 1; }
+    /* Keep callback storage alive if the host did not deliver abort completion.
+     * This process exits immediately afterward, so no dangling callback target. */
+    if (!reader->pending) free(reader);
+    return status;
 }
 
 static int control_out(ProgramSession *session, unsigned code, unsigned address, unsigned timeout) {
