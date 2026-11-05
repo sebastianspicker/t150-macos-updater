@@ -13,6 +13,7 @@
 !/docs/
 /docs/*
 !/docs/USER_GUIDE.md
+!/docs/ARCHITECTURE.md
 !/docs/DEVELOPMENT.md
 !/docs/THIRD_PARTY.md
 !/docs/VALIDATION.md

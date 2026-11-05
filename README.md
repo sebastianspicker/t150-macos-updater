@@ -11,6 +11,8 @@ over USB. You download the official Thrustmaster installer yourself. The app
 reads the firmware out of it without running it, so you don't need Windows, Wine,
 a virtual machine or Homebrew.
 
+> _Claude was used to polish and proof-read the code and documentation of this repository._
+
 <details>
 <summary>Status and limitations</summary>
 
@@ -175,7 +177,9 @@ The app ends up in `dist/T150 Firmware Updater.app`, with a zip next to it. The
 last command opens the app and checks that macOS registered it. It does not touch
 the wheel.
 
-More in [DEVELOPMENT.md](docs/DEVELOPMENT.md). Changes per version are in the
+More in [DEVELOPMENT.md](docs/DEVELOPMENT.md). How the app, the USB engine
+and the session files fit together, with diagrams, is in
+[ARCHITECTURE.md](docs/ARCHITECTURE.md). Changes per version are in the
 [changelog](CHANGELOG.md).
 
 ## Contributing
