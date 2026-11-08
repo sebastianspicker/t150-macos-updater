@@ -5,6 +5,7 @@ cd "$ROOT"
 if [[ "${1:-}" != --under-update-locks ]]; then
     "$ROOT/script/assert_not_running.sh"
     BASE="$HOME/Library/Application Support/T150 Firmware Updater"
+    # shellcheck disable=SC2174 # only BASE must be 0700; parents keep their modes
     mkdir -p -m 700 "$BASE"
     [[ "$(stat -f '%u:%Lp' "$BASE")" == "$(id -u):700" && ! -L "$BASE" ]] || { echo 'Unsafe updater support directory.' >&2; exit 1; }
     exec "$ROOT/.build/packaging/check-lock" --hold \

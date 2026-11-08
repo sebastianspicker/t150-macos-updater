@@ -1,6 +1,7 @@
 # Default private: only these reviewed public roots enter Git.
 /*
 !/.gitignore
+!/.codacy.yml
 !/Package.swift
 !/README.md
 !/CHANGELOG.md

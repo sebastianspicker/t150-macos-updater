@@ -18,7 +18,9 @@ struct BinaryReader {
         let b = Array(try range(offset, 4))
         return UInt32(b[0]) | UInt32(b[1]) << 8 | UInt32(b[2]) << 16 | UInt32(b[3]) << 24
     }
-    func peSections() throws -> [(rva: Int, size: Int, offset: Int)] {
+    struct PESection { let rva, size, offset: Int }
+
+    func peSections() throws -> [PESection] {
         guard Array(try range(0, 2)) == [0x4d, 0x5a] else { throw UpdaterError.invalid("Not a Windows installer.") }
         let pe = Int(try u32(0x3c))
         guard Array(try range(pe, 4)) == [0x50, 0x45, 0, 0] else { throw UpdaterError.invalid("Invalid PE signature.") }
@@ -32,7 +34,7 @@ struct BinaryReader {
             let size = Int(try u32(section + 16))
             let offset = Int(try u32(section + 20))
             _ = try range(offset, size)
-            return (Int(try u32(section + 12)), size, offset)
+            return PESection(rva: Int(try u32(section + 12)), size: size, offset: offset)
         }
     }
 }

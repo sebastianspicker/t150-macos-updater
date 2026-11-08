@@ -1,6 +1,6 @@
 #!/bin/sh
 set -eu
-native_root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+native_root=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 mkdir -p "$native_root/build"
 xcrun clang -std=c11 -Wall -Wextra -Werror -Wno-deprecated-declarations \
   -mmacosx-version-min=14.0 -framework IOKit -framework CoreFoundation \

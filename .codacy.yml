@@ -1,0 +1,6 @@
+---
+# Codacy scope for this repository. Tools and patterns come from the
+# organisation's coding standard; reviewed per-issue ignores live in Codacy.
+exclude_paths:
+  - "docs/licenses/**" # verbatim third-party licence texts
+  - "Resources/**" # binary app icon assets

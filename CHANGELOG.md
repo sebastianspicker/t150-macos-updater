@@ -18,6 +18,8 @@ published as a release. Build numbers are in parentheses.
   engine. The identity checks are unchanged.
 - Remove the `--telemetry` alias of `build_and_run.sh`; use `--logs`.
 - `fixes_profile.py` no longer prints an outdated Swift catalog entry.
+- `fixes_profile.py` is executable, so it runs as `docs/DEVELOPMENT.md` shows.
+- Add `.codacy.yml`, which keeps licence texts and icon assets out of Codacy analysis.
 
 ## 0.6.0 (7), 2026-10-18
 
