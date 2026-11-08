@@ -3,6 +3,8 @@ import Foundation
 /// Port of the reviewed LPC11 transformation. The lookup data is read from the
 /// user's exact official driver; no vendor code or firmware is distributed.
 enum FirmwareDecoder {
+    // One reviewed transform with hash-pinned output; splitting it would only move lines.
+    // swiftlint:disable:next function_body_length
     static func decode(wrapped: Data, driver: Data, profile: FirmwareProfile) throws -> Data {
         guard wrapped.count == 57_472, driver.count == 383_008,
               sha256(wrapped) == profile.wrappedSHA256, sha256(driver) == profile.driverSHA256 else {

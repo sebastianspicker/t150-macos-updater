@@ -1,6 +1,21 @@
 ---
-# Codacy scope for this repository. Tools and patterns come from the
+# Codacy scope for this repository. Tools, patterns and thresholds come from the
 # organisation's coding standard; reviewed per-issue ignores live in Codacy.
 exclude_paths:
   - "docs/licenses/**" # verbatim third-party licence texts
   - "Resources/**" # binary app icon assets
+engines:
+  # Lizard only measures function size and complexity. These files are excluded
+  # on purpose; every other file keeps the metrics.
+  lizard:
+    exclude_paths:
+      # prepare/apply/finish are linear refusal chains whose order is the safety
+      # contract (backups, marker before write, verify before restart).
+      - "Native/t150_engine.c"
+      # Line-for-line port of a reviewed vendor transform; output is hash-pinned.
+      - "Sources/T150Core/FirmwareDecoder.swift"
+      # Developer-only tools, not shipped in the app bundle.
+      - "script/**"
+  swiftlint:
+    exclude_paths:
+      - "script/make_icon.swift" # developer-only icon drawing, not shipped
