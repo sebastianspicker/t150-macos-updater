@@ -122,6 +122,10 @@ struct ContentView: View {
             NoticeView(title: model.busy ? "Keep everything connected" : "Your session is preserved",
                 message: model.busy ? "There is no cancel button during writing. The native device tool performs bounded transfers, verifies the complete image, and only then allows a restart. Quitting and closing this window are blocked while it is working." : "A failed operation is never retried automatically. Keep the original backups and logs for recovery support.",
                 symbol: model.busy ? "lock.shield" : "externaldrive")
+            if model.verifiedAwaitingCheck {
+                Button("Check the wheel", action: model.refreshDevice)
+                    .buttonStyle(.borderedProminent).controlSize(.large).disabled(!model.canAct)
+            }
         case .complete:
             Label(model.alreadyCurrent ? "No flash writes performed" : "Normal operating-mode version confirmed", systemImage: "checkmark.circle.fill")
                 .font(.headline).foregroundStyle(.green)

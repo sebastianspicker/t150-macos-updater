@@ -24,6 +24,12 @@ published as a release. Build numbers are in parentheses.
 - `fixes_profile.py` no longer prints an outdated Swift catalog entry.
 - `fixes_profile.py` is executable, so it runs as `docs/DEVELOPMENT.md` shows.
 - Add `.codacy.yml`, which keeps licence texts and icon assets out of Codacy analysis.
+- If the restart step gives no result after a verified write, the app decides from
+  the engine's restart marker whether the reset was sent, instead of always saying
+  the wheel is still in recovery mode.
+- After a verified write whose restart was not confirmed, the app shows the
+  **Check the wheel** button its message refers to, and reports the update as
+  complete once the wheel shows the target version in normal mode.
 
 ## 0.6.0 (7), 2026-10-18
 

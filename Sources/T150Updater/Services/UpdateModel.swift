@@ -26,6 +26,8 @@ final class UpdateModel: ObservableObject {
     @Published var backupAcknowledged = false
     @Published var confirmUpdate = false
     @Published var alreadyCurrent = false
+    /// The target was written and fully verified, but normal mode was not confirmed.
+    @Published var verifiedAwaitingCheck = false
     @Published var startupFailure: String?
     @Published var helpVisible = false
     private var instanceLock: InstanceLock?
@@ -70,7 +72,7 @@ final class UpdateModel: ObservableObject {
         guard panel.runModal() == .OK, let selected = panel.url else { return }
         let session = base.appendingPathComponent("Sessions", isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
         do { try PrivateFiles.createDirectory(session) } catch { fail(error); return }
-        firmware = nil; target = nil; attempt = nil; device = nil; alreadyCurrent = false; plan = []
+        firmware = nil; target = nil; attempt = nil; device = nil; alreadyCurrent = false; verifiedAwaitingCheck = false; plan = []
         backupAcknowledged = false; modifiedAcknowledged = false; experimentalAcknowledged = false
         secured = false; powerConnected = false; ps3 = false; stableUSB = false
         stage = .installer
@@ -117,6 +119,15 @@ final class UpdateModel: ObservableObject {
             }
             guard result.ok else { throw UpdaterError.process(result.message) }
             let version = result.device?.applicationVersion
+            if verifiedAwaitingCheck {
+                guard result.device?.pid == 0xb677, version == target.version else {
+                    throw UpdaterError.process("The wheel does not report V\(target.version) in normal mode yet. Reconnect USB without holding L3 + R3, let it calibrate, then check again. Do not start another update.")
+                }
+                verifiedAwaitingCheck = false; stage = .complete
+                headline = "\(target.name) is installed and verified"
+                detail = "The entire image was verified before the restart, and the wheel now reports V\(target.version) in normal mode. Check that calibration and the MODE light look normal. Your backups and verification records are saved."
+                end(); return
+            }
             let sameVersionCheck = version == target.version
             if let version, version > target.version {
                 alreadyCurrent = true; stage = .complete
@@ -179,20 +190,21 @@ final class UpdateModel: ObservableObject {
         stage = .updating
         begin("Updating to \(target.name)", "Keep USB and wheel power connected. Keep the Mac awake with its lid open. The app will verify the entire flash before restarting; the wheel may then calibrate.")
         Task {
-            var verifiedNotRestarted: Bool? = nil   // set once apply succeeded: whether finish issued the reset
+            var applyVerified = false
+            var restartIssued: Bool?   // finish's own report; nil when it gave no readable result
             do {
                 let applied = try await Task.detached {
                     try EngineClient.run("apply", session: attempt, extra: ["--confirm-program"])
                 }.value
                 guard applied.ok else { throw UpdaterError.process(applied.message) }
                 try Self.requireProfile(applied, target)
-                verifiedNotRestarted = true
+                applyVerified = true
                 headline = "Firmware verified. Preparing to restart."
                 detail = "Reading the complete flash once more before restarting. Keep hands and objects clear of the wheel’s rotation."
                 let finished = try await Task.detached {
                     try EngineClient.run("finish", session: attempt, extra: ["--confirm-restart"])
                 }.value
-                verifiedNotRestarted = finished.restartIssued != true
+                restartIssued = finished.restartIssued
                 guard finished.ok, finished.device?.applicationVersion == target.version,
                       finished.device?.pid == 0xb677 else { throw UpdaterError.process(finished.message) }
                 try Self.requireProfile(finished, target)
@@ -201,11 +213,18 @@ final class UpdateModel: ObservableObject {
                 detail = "The entire image was verified, the original bootloader is unchanged, and the wheel reports V\(target.version) in normal mode. Check that calibration and the MODE light look normal. Your backups and verification records are saved."
                 end()
             } catch {
-                // The engine saves apply-started before it can send any programming command.
-                let writeMayHaveStarted = FileManager.default.fileExists(atPath: attempt.appendingPathComponent("apply-started").path)
-                if let verifiedNotRestarted {
-                    failedAfterVerification(error, restartIssued: !verifiedNotRestarted, target: target)
-                } else if writeMayHaveStarted { fail(error, afterWrite: true) } else { stoppedBeforeWrite(error) }
+                // The engine saves apply-started before any programming command and
+                // restart-started before the reset.
+                func marker(_ name: String) -> Bool {
+                    FileManager.default.fileExists(atPath: attempt.appendingPathComponent(name).path)
+                }
+                switch UpdateOutcome.after(applyVerified: applyVerified, applyStarted: marker("apply-started"),
+                                           restartIssued: restartIssued, restartStarted: marker("restart-started")) {
+                case .notWritten: stoppedBeforeWrite(error)
+                case .writeMayHaveStarted: fail(error, afterWrite: true)
+                case .verifiedNotRestarted: failedAfterVerification(error, restartIssued: false, target: target)
+                case .verifiedRestartSent: failedAfterVerification(error, restartIssued: true, target: target)
+                }
             }
         }
     }
@@ -214,7 +233,7 @@ final class UpdateModel: ObservableObject {
     /// is in a known good state; only the restart step did not complete.
     private func failedAfterVerification(_ error: Error, restartIssued: Bool, target: FirmwareTarget) {
         failure = error.localizedDescription
-        stage = .updating
+        stage = .updating; verifiedAwaitingCheck = true
         if restartIssued {
             headline = "Firmware verified and restart sent. Check the wheel."
             detail = "The new image was fully verified and the restart command was sent, but the app could not confirm normal mode within its time limit. Do not start another update. Wait for the wheel to finish calibrating, then reconnect USB normally (without holding L3 + R3) and use Check the wheel; it should report V\(target.version). Keep this session’s backups."

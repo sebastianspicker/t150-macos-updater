@@ -66,6 +66,12 @@ If the update stops before anything was written (for example because the wheel w
 reconnected or the Mac lost AC power), the app says so and asks for new backups.
 Each attempt gets its own folder in the session.
 
+If the new firmware was written and verified but the app could not confirm the
+restart, it says whether the restart was sent. Reconnect USB without holding
+L3 + R3, let the wheel calibrate, then press **Check the wheel**. The update is
+complete when the wheel reports the new version in normal mode. Don't start another
+update.
+
 ### Choosing firmware
 
 This version offers seven V35 builds: the official firmware, "V35 + fixes", and
