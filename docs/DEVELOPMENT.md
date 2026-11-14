@@ -1,5 +1,8 @@
 # Development
 
+This work is limited to the owner's own wheel. Read [SCOPE.md](SCOPE.md) before
+changing anything that touches firmware, flashing or recovery.
+
 ## Layout
 
 The code map, runtime overview and step by step diagrams are in

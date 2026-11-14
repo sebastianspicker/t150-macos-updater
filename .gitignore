@@ -2,6 +2,7 @@
 /*
 !/.gitignore
 !/.codacy.yml
+!/CLAUDE.md
 !/Package.swift
 !/README.md
 !/CHANGELOG.md
@@ -13,6 +14,8 @@
 !/Native/
 !/docs/
 /docs/*
+!/docs/SCOPE.md
+!/docs/FRAMING.md
 !/docs/USER_GUIDE.md
 !/docs/ARCHITECTURE.md
 !/docs/DEVELOPMENT.md

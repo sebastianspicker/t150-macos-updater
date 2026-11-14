@@ -7,6 +7,11 @@ Thanks for helping. The most useful contributions right now:
 - **Bug reports** with the step where the app stopped and its logs.
 - **Fixes to the app or docs.**
 
+## Before you start
+
+Read [docs/SCOPE.md](docs/SCOPE.md). If your change is outside it, open an issue
+first. The instructions for AI assistants are in [CLAUDE.md](CLAUDE.md).
+
 ## Ground rules
 
 - Never commit or attach Thrustmaster's installer, driver, firmware images, wheel backups
@@ -18,6 +23,34 @@ Thanks for helping. The most useful contributions right now:
 - A modified firmware build is never changed in place. A new build gets a new profile
   name and a new pinned SHA-256, see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 - Don't run `prepare`, `apply` or `finish` against a wheel as part of a routine test.
+
+## What is not welcome
+
+- Work aimed at a wheel you do not own, or at a device without the owner's consent.
+- Thrustmaster's installer, firmware, backups or modified images in git.
+- Console authentication or licensing bypass, game-memory changes or cheating.
+- Unmasked captures with personal data.
+- "It should work" without a pointer.
+
+## Evidence rules
+
+Every factual claim needs at least one:
+
+- `path/to/file:line`
+- a flash address (`image`, `0x…`)
+- an input SHA-256
+- a public URL
+
+And a confidence label:
+
+| Label | Means |
+|---|---|
+| `proven` | disassembly plus a reproduction in the emulator |
+| `likely` | static evidence only |
+| `guessed` | inference from related behaviour |
+
+A static finding is never `proven` for "it works". `proven` describes the
+evidence, not the outcome.
 
 ## Development
 

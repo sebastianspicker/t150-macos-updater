@@ -1,7 +1,26 @@
 # Security
 
 This app writes firmware to a USB device, so a bug in its checks can damage hardware.
-Please report anything that could make it:
+
+## Scope
+
+This repository covers interoperability and repair work on the owner's own
+Thrustmaster T150. It does not target other people's wheels, redistribute
+Thrustmaster's installer or firmware, bypass console authentication, or modify
+games. See [docs/SCOPE.md](docs/SCOPE.md).
+
+## Risk classes
+
+| Class | Meaning |
+|---|---|
+| `read-only` | extraction, strings, disassembly, emulator runs; no device contact |
+| `flash` | replaces firmware on the owner's wheel; stock image, backups and recovery path recorded |
+
+Every write procedure must name its class and its revert or recovery path.
+
+## Reporting a safety problem
+
+Please report anything that could make the app:
 
 - write an image that is not one of its pinned builds
 - write to the bootloader area (the first 8 KiB)

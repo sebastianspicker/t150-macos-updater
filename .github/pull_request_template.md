@@ -5,6 +5,7 @@
 ## Checks
 
 - [ ] `./script/package_app.sh` passes
+- [ ] Change is within [docs/SCOPE.md](../docs/SCOPE.md)
 - [ ] No installer, driver, firmware image, backup or session file is added
 - [ ] Docs and CHANGELOG.md updated if behaviour or text changed
 

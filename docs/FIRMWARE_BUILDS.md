@@ -7,6 +7,11 @@ about how it behaves on a PlayStation 5.
 
 None of these builds is an official Thrustmaster release.
 
+These builds are interoperability and repair work on the owner's own wheel. They
+are made on the owner's Mac from the official image the user supplies; no
+modified image is redistributed. The V5 bootloader and the console authentication
+exchange are never changed. Scope and legal basis: [SCOPE.md](SCOPE.md).
+
 ## How the modified builds are made
 
 No modified firmware is shipped with the app or downloaded. The native engine

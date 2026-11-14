@@ -13,6 +13,20 @@ a virtual machine or Homebrew.
 
 > _Claude was used to polish and proof-read the code and documentation of this repository._
 
+## Scope and legal basis
+
+This is independent interoperability and repair work on the owner's own
+Thrustmaster T150, not a vendor-supported product. The firmware is read from the
+official installer you download; it is not redistributed here. Reverse
+engineering for interoperability is lawful in the EU under Article 6 of Software
+Directive 2009/24/EC and § 69e UrhG, and the project works on the owner's own
+wheel with the stock image and recovery path kept. The V5 bootloader and the
+console authentication exchange are never changed.
+
+The full in-scope and out-of-scope list, the legal basis in more detail, and the
+risk and recovery rules are in [docs/SCOPE.md](docs/SCOPE.md). Instructions for
+AI assistants working in this repository are in [CLAUDE.md](CLAUDE.md).
+
 <details>
 <summary>Status and limitations</summary>
 
@@ -193,8 +207,8 @@ Reports from real wheels help most: open a
 [PS5 test report](https://github.com/sebastianspicker/t150-macos-updater/issues/new?template=ps5_report.yml)
 whether the fix worked for you or not. For bugs, use the bug report template and
 attach the logs, never the `.bin` backups. Code and doc changes are welcome; see
-[CONTRIBUTING.md](CONTRIBUTING.md). Security problems go through
-[SECURITY.md](SECURITY.md).
+[CONTRIBUTING.md](CONTRIBUTING.md) and the [project scope](docs/SCOPE.md). Security
+problems go through [SECURITY.md](SECURITY.md).
 
 ## Thanks
 

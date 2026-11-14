@@ -1,5 +1,9 @@
 # User guide
 
+Use this app only on a T150 you own, or on a wheel whose owner has asked you to
+update it. The app reads the firmware from the official installer; it does not
+redistribute it. Scope and legal basis: [SCOPE.md](SCOPE.md).
+
 ## Before you start
 
 - Use a Mac on AC power and keep it awake with the lid open.

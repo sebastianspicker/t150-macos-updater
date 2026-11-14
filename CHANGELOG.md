@@ -5,6 +5,10 @@ published as a release. Build numbers are in parentheses.
 
 ## Unreleased
 
+- Document the project scope, legal basis and deployment boundary in
+  [docs/SCOPE.md](docs/SCOPE.md), [docs/FRAMING.md](docs/FRAMING.md) and
+  [CLAUDE.md](CLAUDE.md); align the README, security, contributing, development,
+  user and validation docs with that framing.
 - Restrict automatic general CI to Dependabot-authored PRs; retain manual builds.
 - Add weekly GitHub Actions updates and separate Swift/native C CodeQL analysis.
 - Fold the status notice below the introduction and clarify build/update boundaries.

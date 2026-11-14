@@ -4,6 +4,9 @@ What has been tested, on what, and what has not. Version history is in the
 [changelog](../CHANGELOG.md), and the firmware builds are described in
 [FIRMWARE_BUILDS.md](FIRMWARE_BUILDS.md).
 
+This record covers tests on the owner's own wheels, or on a tester's wheel with
+that owner's consent. See [SCOPE.md](SCOPE.md) for the deployment boundary.
+
 Development machine: Apple Silicon (arm64), macOS 27.0.1, Apple Swift 6.4,
 CMake 4.4.4. The app targets macOS 14, but it has not been run on macOS 14.
 
