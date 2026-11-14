@@ -1,9 +1,10 @@
 # Architecture
 
 This page explains how the updater works inside: what runs where, what happens
-when you import an installer and update a wheel, where files are kept, and how
-the app is built. For using the app, read the [user guide](USER_GUIDE.md). For
-build commands and the target profile rules, read [DEVELOPMENT.md](DEVELOPMENT.md).
+when you import an installer and update a wheel, what goes over USB, where files
+are kept, and how the app is built. For using the app, read the
+[user guide](USER_GUIDE.md). For build commands and the target profile rules,
+read [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## In one paragraph
 
@@ -83,10 +84,17 @@ without AC power. The app launches tools only from
 `T150 Firmware Updater.app/Contents/Resources/Tools` by absolute path, with a
 fixed `PATH`.
 
-The wheel shows up as one of two USB devices. Product id `0xb677` is normal
-mode, `0xb676` is the bootloader (recovery mode). `status` works in both;
-`prepare`, `apply` and `finish` only work in recovery mode. More than one
-Thrustmaster device at once is refused.
+The wheel shows up under one of three USB product ids. `0xb676` is the
+bootloader (recovery mode). `0xb677` is normal mode and answers a version read.
+`0xb65d` is also the normal firmware, before a host has set it up; it reports
+no version. `status` works with all three; `prepare`, `apply` and `finish` only
+work in recovery mode. More than one Thrustmaster device at once is refused.
+
+The engine is one C file: [t150_engine.c](../Native/t150_engine.c) includes
+`transport.inc`, `storage.inc`, `policy.inc` and `device.inc`, in that order, and
+is compiled by [Native/build.sh](../Native/build.sh). The USB functions it calls
+sit in one table (`EngineIO`), which offline tests swap at compile time. No
+command line option, file or environment variable changes that table.
 
 Where in the code:
 
@@ -184,20 +192,93 @@ holds the exact target, `prepare` stops with `already_current`.
 `apply` (steps 7 to 13) reloads and rechecks every session file, reads the flash
 a third time to make sure nothing changed, and writes the `apply-started` marker
 before the first programming command. After writing it reads all 64 KiB back and
-compares them to the target. `finish` (steps 15 to 18) verifies the flash once
-more, records `restart-started`, sends one reset, and waits for the wheel to come
-back in normal mode with the target version.
+compares them to the target. `finish` (steps 14 to 17) verifies the flash once
+more, records `restart-started`, sends one reset, and waits up to 20 seconds for
+the wheel to come back in normal mode with the target version.
 
 The app checks every result: the result must name the same operation and the
 selected profile, and `finish` must report product `0xb677` and the target
-version. If something fails, `UpdateModel` uses the `apply-started` file to tell
-"nothing was written" apart from "a write may have started".
+version.
+
+### When an update stops
+
+If any step fails, the app does not guess from which call threw. It takes the
+engine's own report and the marker files in the update folder, and
+`UpdateOutcome.after` picks one of four messages:
+
+| Evidence | `UpdateOutcome` | What the app tells the user |
+| --- | --- | --- |
+| no `apply-started` | `notWritten` | nothing was written; save new backups to try again |
+| `apply-started`, but `apply` did not verify | `writeMayHaveStarted` | keep the wheel connected, follow the recovery guidance |
+| `apply` verified; `finish` reports no reset, or gave no result and there is no `restart-started` | `verifiedNotRestarted` | the new image is in flash, the wheel is still in recovery mode |
+| `apply` verified; `finish` reports the reset, or gave no result but `restart-started` exists | `verifiedRestartSent` | the reset was sent; wait for calibration |
+
+In both "verified" cases the screen offers **Check the wheel**. It runs `status`
+and marks the update finished only when the wheel reports product `0xb677` with
+the target version. Anything else keeps the user on that screen with
+instructions. The app never offers to write again from these states.
 
 Where in the code:
 
 - [Native/t150_engine.c](../Native/t150_engine.c): `prepare_operation`, `apply_operation`, `finish_operation`
 - [Native/policy.inc](../Native/policy.inc): profile table, `construct_target`, `load_session`, manifest
-- `UpdateModel.prepareBackup` and `UpdateModel.update`
+- [Sources/T150Core/UpdateOutcome.swift](../Sources/T150Core/UpdateOutcome.swift): the four outcomes
+- `UpdateModel.prepareBackup`, `UpdateModel.update` and `UpdateModel.readStatus`
+
+## What goes over USB
+
+The messages behind steps 3, 8, 10, 11 and 15 above, as the engine sends them.
+`40/47` means request type `0x40`, request `0x47`.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant eng as t150-engine
+  participant boot as Bootloader b676
+  participant fw as Wheel firmware
+  eng->>boot: c0/02 and c0/03 version reads
+  eng->>boot: read configuration descriptor
+  eng->>boot: 40/47 start flash read
+  loop 2048 blocks
+    boot--)eng: tag 3 frame, address and 32 bytes
+  end
+  loop each run of changed pages
+    eng->>boot: 40/0d run start address
+    eng->>boot: bulk OUT, the run's bytes
+    boot--)eng: tag 4 frames, checked against target
+    eng->>boot: 40/01 write-disable
+  end
+  eng->>boot: 40/24 restart, sent once
+  fw--)eng: re-enumerates as b65d or b677
+  opt comes back as b65d
+    eng->>fw: 41/53 normal-mode setup, sent once
+  end
+  eng->>fw: c1/56 version read
+```
+
+Every open of the bootloader (steps 1 and 2) requires bootloader version 5,
+the expected application version and a byte-exact configuration descriptor with
+one interrupt IN and one bulk OUT endpoint. Only then does any other request go
+out. A flash read (steps 3 and 4) is complete only when each of the 2048 blocks of
+32 bytes has arrived exactly once, or repeated with the same bytes, within 10
+seconds. The engine reads the flash this way twice in `prepare`, twice in `apply`
+(before writing and for the readback) and once in `finish`.
+
+Programming (steps 5 to 8) runs once per run of changed pages from `make_runs`.
+The write-disable in step 8 is sent after every run, even when the setup or the
+transfer failed, and the first failure stops everything without a retry. During
+the transfer the bootloader sends progress frames, and the engine compares each
+one with the target bytes it covers.
+
+For the restart (steps 9 to 12) the engine sends one reset. If the wheel comes
+back as `0xb65d`, it checks the model and sends one setup request so the firmware
+switches to `0xb677`. The update is confirmed only by a successful version read
+that returns the target version.
+
+Where in the code:
+
+- [Native/transport.inc](../Native/transport.inc): `open_bootloader`, `versions_match`, `descriptor_matches`, `capture_image`, `accept_packet`, `program_runs`
+- [Native/device.inc](../Native/device.inc): `probe_status`, `model_matches`, `normal_version`, `restart_and_confirm`
 
 ## Session states
 
@@ -211,10 +292,15 @@ stateDiagram-v2
   WriteStarted --> Applied: readback matches, applied
   WriteStarted --> Stopped: write or readback failed
   Applied --> RestartStarted: finish writes restart-started
+  Applied --> CheckWheel: finish stopped before the reset
   RestartStarted --> Finished: normal mode confirmed, finished
   RestartStarted --> CheckWheel: no confirmation in time
   Finished --> [*]
 ```
+
+`CheckWheel` is not a file. It is the app screen from
+[When an update stops](#when-an-update-stops), where **Check the wheel** reads the
+wheel's status instead of touching the folder again.
 
 There is no way back to an earlier state in the same folder. `apply` refuses a
 folder that already has `apply-started`, and `finish` refuses one with
@@ -236,9 +322,12 @@ folders with mode `0700` and files with mode `0600`.
 | `Sessions/<uuid>/import-receipt.json` | `InstallerImporter` | profile, hashes, time |
 | `Sessions/<uuid>/import.log`, `status-*` | app, engine | extraction log, status results |
 | `Sessions/<uuid>/Update-<uuid>/` | app, engine | one folder per backup attempt |
+| `Update-<uuid>/firmware.tmf` | engine | copy of the decoded firmware the plan was built from |
 | `Update-<uuid>/backup-a.bin`, `backup-b.bin` | engine | two full 64 KiB flash reads |
 | `Update-<uuid>/target.bin`, `manifest.*` | engine | target image and the prepared plan |
+| `Update-<uuid>/before-apply.bin`, `before-restart.bin` | engine | the fresh reads just before writing and before the reset |
 | `Update-<uuid>/readback.bin`, markers | engine | post write read and the state files above |
+| `Update-<uuid>/*.log`, `*-result.json` | engine, app | per operation logs and results |
 
 The app's "Show Saved Sessions" menu item opens the `Sessions` folder. Nothing
 is deleted automatically after an update, so the backups stay available for
@@ -297,6 +386,7 @@ In the order a newcomer would read it.
 | [Sources/T150Core/BinaryReader.swift](../Sources/T150Core/BinaryReader.swift) | PE overlay and cabinet reader |
 | [Sources/T150Core/FirmwareDecoder.swift](../Sources/T150Core/FirmwareDecoder.swift) | TMF decoding |
 | [Sources/T150Core/ChildProcess.swift](../Sources/T150Core/ChildProcess.swift), [PrivateFiles.swift](../Sources/T150Core/PrivateFiles.swift) | child processes, private files, locks |
+| [Sources/T150Core/UpdateOutcome.swift](../Sources/T150Core/UpdateOutcome.swift) | which message the app shows after a stopped update |
 | [Native/t150_engine.c](../Native/t150_engine.c) | engine entry and the four operations |
 | [Native/policy.inc](../Native/policy.inc) | target profiles, patch tables, image checks |
 | [Native/transport.inc](../Native/transport.inc), [Native/device.inc](../Native/device.inc) | USB reads, writes and restart |

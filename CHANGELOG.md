@@ -30,6 +30,9 @@ published as a release. Build numbers are in parentheses.
 - After a verified write whose restart was not confirmed, the app shows the
   **Check the wheel** button its message refers to, and reports the update as
   complete once the wheel shows the target version in normal mode.
+- ARCHITECTURE.md: add the USB message sequence, the four messages after a stopped
+  update, the third normal-mode product id (`0xb65d`) and the missing session
+  files; fix the `finish` step numbers.
 
 ## 0.6.0 (7), 2026-10-18
 
